@@ -70,23 +70,30 @@ def get_all_members(group_id):
     return members_list
 
 
-# Получение возраста по id
-def get_user_age(user_ids):
-    age = 0
-    r = requests.get('https://api.vk.com/method/users.get', params={
-        'access_token': access_token,
-        'user_ids': user_ids,
-        'fields': 'bdate',
-        'v': 5.131
-    })
-    try:
-        bdate = r.json()['response'][0]['bdate']
-    except KeyError:
-        pass
-    else:
-        if len(bdate) > 6:
-            age = calculate_age(bdate)
-    return age
+# Получение информации о пользователе по id
+def get_users(user_ids, fields):
+    offsets_list, data = [], []
+
+    for i in range(0, len(user_ids), 1000):
+        offsets_list.append(user_ids[i: 1000 + i])
+
+    for offset in offsets_list:
+        try:
+            r = requests.get('https://api.vk.com/method/users.get', params={
+                'access_token': access_token,
+                'user_ids': offset,
+                'fields': fields,
+                'v': 5.131
+            })
+            items = r.json()['response']
+        except KeyError:
+            print('[ERROR] Next try after 500ms!')
+            time.sleep(0.5)
+            get_member_count(user_ids)
+        else:
+            for item in items:
+                data.append(item)
+    return data
 
 
 # Пересечение аудитории
@@ -129,7 +136,6 @@ def write_to_file(filename, data):
 
 
 def main():
-    groups_list = ['twchnews', 'streaminside']
 
 
 if __name__ == '__main__':
