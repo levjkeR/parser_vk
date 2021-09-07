@@ -12,25 +12,30 @@ access_token = auth_data['access_token']
 
 # Общее количество подписчиков в паблике(определить смещение)
 def get_member_count(group_id):
-    count = requests.get('https://api.vk.com/method/groups.getMembers', params={
-        'access_token': access_token,
-        'group_id': group_id,
-        'sort': 'id_asc',
-        'offset': 0,
-        'v': 5.131
-    }).json()['response']['count']
-    return count
+    try:
+        count = requests.get('https://api.vk.com/method/groups.getMembers', params={
+            'access_token': access_token,
+            'group_id': group_id,
+            'sort': 'id_asc',
+            'offset': 0,
+            'v': 5.131
+        }).json()['response']['count']
+    except Exception as ex:
+        print('[ERROR] Next try after 500ms!')
+        time.sleep(0.5)
+        get_member_count(group_id)
+    else:
+        return count
 
 
 # Список id подписчиков группы
 def get_all_members(group_id):
-    male_count, female_count, false_count = 0, 0, 0
     member_count = get_member_count(group_id)
-    members_list = {'count': member_count, 'male': {'count': male_count, 'items': []},
-                    'female': {'count': female_count, 'items': []},
-                    'false': {'count': false_count, 'items': []}}
-    max_offset = member_count // 1000
-    for offset in range(0, max_offset + 1):
+    members_list = {'count': member_count, 'male': {'count': 0, 'items': []},
+                    'female': {'count': 0, 'items': []},
+                    'false': {'count': 0, 'items': []}}
+    offset, max_offset = 0, member_count // 1000
+    while offset < max_offset + 1:
         try:  # Блок, чтобы отлавливать ошибки, когда ответ на запрос ошибочный
             r = requests.get('https://api.vk.com/method/groups.getMembers', params={
                 'access_token': access_token,
@@ -40,22 +45,25 @@ def get_all_members(group_id):
                 'v': 5.131
             })
             data = r.json()['response']['items']
-        except KeyError:
-            time.sleep(1)
-            offset -= 1
+        except Exception as ex:
+            print('[ERROR] Next try after 500ms!')
+            time.sleep(0.5)
         else:
             for item in data:
-                try:  # Мега тупое решение, НО РАБОЧЕЕЕ
+                try:
                     if item['deactivated']:
                         members_list['false']['items'].append(item['id'])
                 except KeyError:
                     try:
                         if item['sex'] == 2:
                             members_list['male']['items'].append(item['id'])
-                        else:
+                        elif item['sex'] == 1:
                             members_list['female']['items'].append(item['id'])
+                        else:
+                            members_list['false']['items'].append(item['id'])
                     except KeyError:
                         members_list['false']['items'].append(item['id'])
+            offset += 1
     members_list['male']['count'] = (len(members_list['male']['items']))
     members_list['female']['count'] = (len(members_list['female']['items']))
     members_list['false']['count'] = (len(members_list['false']['items']))
@@ -122,10 +130,6 @@ def write_to_file(filename, data):
 
 def main():
     groups_list = ['twchnews', 'streaminside']
-
-    for group in groups_list:
-        data_list = get_all_members(group)
-        write_to_file(f'{group}.json', data_list)
 
 
 if __name__ == '__main__':
